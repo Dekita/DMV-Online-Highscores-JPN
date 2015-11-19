@@ -8,29 +8,9 @@
 /*:
  * @author Dekita (www.dekyde.com)
  * 
- * @plugindesc このプラグインをRPGツクールMVプロジェクトに追加すると 
- * カスタマイズ可能なハイスコアリストを表示することができます。
+ * @plugindesc This plugin allows for customizable highscore lists to be 
+ * shown within your RPG Maker Mv Project.
  * 
- * @param Score Table Name
- * @desc サーバ側に用意されたスコアリストのテーブル名。
- * @default
- *
- * @param ActorID For Name
- * @desc ここで指定したIDのアクターの名前が「名前」としてサーバに送信されます。
- * @default 1
- *
- * @param VarID For Score
- * @desc ここで指定した変数IDの値が「スコア」としてサーバに送信されます。
- * @default 1
- *
- * @param VarID For Extra
- * @desc ここで指定した変数IDの値が「追加データ」としてサーバに送信されます。
- * @default 2
- *
- * @param Window Header
- * @desc ハイスコアリスト表示ウィンドウのタイトル。
- * @default オンラインハイスコアリスト
- *
  * @help
  * ============================================================================
  * ■ System Information:
@@ -128,12 +108,12 @@
 
 
 /**
- * DMVプラグインのチェック、使用可能ならそこにプラグインを登録。
+ * Checks for DMV Core plugin and register if available
  */
 (function(){
   if (typeof DMV === 'undefined') {
-    var strA = "このDMVプラグインを使用するにはMV_Commonsと ";
-    var strB = "DMV_Coreプラグインを追加する必要があります！";
+    var strA = "You need to install the DMV_Core plugin ";
+    var strB = "in order for other DMV plugins to work!";
     throw new Error(strA + strB);
   }else{
     DMV.register("Online_Highscores", "1.0.0", "13/1o/2o15");
@@ -141,48 +121,48 @@
 })();
 
 /**
- * 無名関数(DMV) 
+ * AnonomousFunction(DMV) 
  */
 (function($){
   /**
-   * strict mode使用でコードスメルを強く
+   * use strict mode to give code a stronger smell 
    */
   "use strict";
 
   /**\\\\\\\\\\\\\\\\\\\\\\\\\\\
-   * カスタマイズセクションここから
+   * Customization Section Begin
    **///////////////////////////
 
   /**
    * host (string)
    * 
-   * phpファイルとsqlデータベースを保持しているウェブサイトのアドレス。
-   * このシステムはここで指定されたサイトと通信を行います。
-   * localhostであってもhttp(s?)://を含めてください。
+   * The website address for the server that holds the php
+   * files & sql databases that this system interacts with
+   * remember to include http(s?):// even for localhost.
    */ 
   var host = "http://dekyde.com/dmv-osohigh/";
 
   /**
    * keys (object)
    * 
-   * ホストに送られるリクエストのタイプ。
-   * @param add_new (string): 新たなスコアを送信するときに使われるキーワード。
-   * @param get_all (string): リストデータを受信するときに使われるキーワード。
+   * The request type keyword to send the host.
+   * @param add_new (string): The keyword used when sending new scores.
+   * @param get_all (string): The keyword used when obtaining list data. 
    */ 
   var keys = {add_new:'add', get_all:'get'};
 
   /**
    * default_position (object)
    * 
-   * @param x (string): ウィンドウのx位置。
-   * @param y (string): ウィンドウのy位置。
-   * @param w (string): ウィンドウの幅。
-   * @param h (string): ウィンドウの高さ。
+   * @param x (string): Formula to calculate window x position  
+   * @param y (string): Formula to calculate window y position
+   * @param w (string): Formula to calculate window width
+   * @param h (string): Formula to calculate window height
    * 
-   * @note arguments[0]は幅、高さのどちらかの値を持ちます。
-   *  x位置の場合はウィンドウの幅の値を持ち、
-   *  y位置の場合はウィンドウの高さの値を持ちます。
-   *  これはウィンドウを画面中心に表示するためのものです。
+   * @note arguments[0] holds refrence to either 1 of 2 values.
+   *  for the x formula, it holds the window width value, for 
+   *  the y formula, it holds the height value. 
+   *  This is to allow for perfect centering of the window.
    */
   var default_position = {
     x: "Graphics.boxWidth/2-(arguments[0]/2)",
@@ -192,32 +172,27 @@
   };
 
   /**
-   * default_scorename, default_score, default_extra, default_head, tableName (string)
+   * default_scorename (string)
    * 
-   * これらの文字列は、どの変数を使って新しいハイスコアのエントリーが
-   * 行われるかを定義します。
+   * This string holds the default formula that determines how new 
+   * highscore entries name field is filled when new scores are added. 
    */
-  var parameters        = PluginManager.parameters("DMV_Online_Highscores");
-  var tableName         = parameters['Score Table Name'];
-  var default_head      = parameters['Window Header'];
-  var default_scorename = "$gameActors.actor("+parameters['ActorID For Name']+").name()";
-  var default_score     = "$gameVariables.value("+parameters['VarID For Score']+")";
-  var default_extra     = (parameters['VarID For Extra'] !== "0")? "$gameVariables.value("+parameters['VarID For Extra']+")" : "''";
+  var default_scorename = "$gameActors.actor(1).name()";
 
   /**
    * highscore_lists (object)
    * 
-   * この配列の各要素はハイスコアリストのデータオブジェクトです。
-   * これらのオブジェクトは、ハイスコアシーンでどのデータを
-   * どう表示するかを定義しています。
+   * Each element within this array is a highscore list data object.
+   * These objects are used to determine which data, and how to display 
+   * said data within the game highscore scene. 
    * 
-   * @param head (string): リストの表題を定義する文字列。
-   * @param posi (object): default_positionを見てください。
-   * @param post (object): 以下を参照してください;
-   * @param post.sname (string): 新しいハイスコア名。
-   * @param post.score (string): 新しいハイスコア。
-   * @param post.extra (string): 新しい追加データ。
-   * @note 追加データのフィールドに"''"を入れて空文字が入っていることを保証します(不使用の時に必要)。
+   * @param head (string): String to detrmine the list header name
+   * @param posi (object): See default_position for object params
+   * @param post (object): See below for params;
+   * @param post.sname (string): Forumla for new highscore name 
+   * @param post.score (string): Forumla for new highscore score
+   * @param post.extra (string): Forumla for new highscore extra data
+   * @note "''" Ensures the extra field is an emptry string (required when unused)
    */
   var highscore_lists = {
     // 
@@ -272,21 +247,9 @@
     // More lists go here
     // 
   };
-  
-  //List Identifier: パラメータ'Score Table Name'で定義されたテーブル名。
-  highscore_lists[tableName] = {
-    head: default_head,
-    posi: default_position,
-    post: {
-      sname: default_scorename,
-      score: default_score,
-      extra: default_extra
-    }
-  };
-
 
   /**\\\\\\\\\\\\\\\\\\\\\\\\\
-   * カスタマイズセクションここまで。
+   * Customization Section End
    **/////////////////////////
 
 
@@ -296,10 +259,10 @@
   (function(http) {
     /**
      * DMV.HTTP.getHighscores(listID, funk, thisObj)
-     * @param listID apiに送るユニークなリストID。
-     * @param funk 処理が終了した時に呼ばれる関数。
-     * @param thisObj funcの'this'引数として渡されるオブジェクト。
-     * @return listIDが無効な場合のみfalseを返します。
+     * @param listID the unique list id to send the api
+     * @param funk the function to call when finished
+     * @param thisObj the  object to send as 'this' to funk
+     * @return false only if listID is invalid
      */
     http.getHighscores = function(listID, funk, thisObj){
       if (!highscore_lists[listID]){return false};
@@ -308,11 +271,11 @@
     };
     /**
      * DMV.HTTP.postHighscore(listID, name, score, extra)
-     * @param listID apiに送るユニークなリストID。
-     * @param name 新しいエントリーの名前。
-     * @param score 新しいエントリーのスコア。
-     * @param extra 新しいエントリーの追加データ。
-     * @return listIDが無効な場合のみfalseを返します。
+     * @param listID the unique list id to send the api
+     * @param name the new list entry name
+     * @param score the new list entry score
+     * @param extra the new list entry extra data
+     * @return false only if listID is invalid
      */
     http.postHighscore = function(listID, name, score, extra){
       if (!highscore_lists[listID]){return false};
@@ -323,7 +286,7 @@
       });
     };
     /**
-     * DMV.HTTP宣言ここまで。
+     * End DMV.HTTP declarations
      */
   })($.HTTP);
 
@@ -334,7 +297,7 @@
   (function(terp){
     /**
      * Game_Interpreter.prototype.pluginCommand(command, args)
-     * プラグインコマンドhighscoreの処理。
+     * Processes highscore plugin commands
      */
     var opluginCommand = terp.pluginCommand;
     terp.pluginCommand = function(command, args) {
@@ -346,7 +309,7 @@
     };
     /**
      * Game_Interpreter.prototype.highscorePluginCommand(args)
-     * プラグインコマンドhighscoreのスコア追加、表示のための処理。
+     * Processes highscore plugin commands to view and add scores
      */
     terp.highscorePluginCommand = function(args) {
       switch(args[0]){
@@ -356,9 +319,9 @@
     };
     /**
      * Game_Interpreter.prototype.openHighscoreScene(listID)
-     * @param listID apiに送るユニークなリストID。
-     * @return listIDが無効な場合のみfalseを返します。
-     * listIDのリスト表示のためのハイスコアシーンを開きます。
+     * @param listID the unique list id to send the api
+     * @return false only if listID is invalid
+     * Opens the highscore scene for listID
      */
     terp.openHighscoreScene = function(listID){
       if (!highscore_lists[listID]){return false};
@@ -367,9 +330,9 @@
     };
     /**
      * Game_Interpreter.prototype.addNewHighscore(listID)
-     * @param listID apiに送るユニークなリストID。
-     * @return listIDが無効な場合のみfalseを返します。
-     * listIDのリストにハイスコアを追加。
+     * @param listID the unique list id to send the api
+     * @return false only if listID is invalid
+     * Adds highscore into list for listID
      */
     terp.addNewHighscore = function(listID) {
       if (!highscore_lists[listID]){return false};
@@ -380,7 +343,7 @@
       $.HTTP.postHighscore(listID, sname, score, extra);
     };
     /**
-     * Game_Interpreter.prototype宣言ここまで。
+     * End Game_Interpreter.prototype declarations
      */
   })(Game_Interpreter.prototype);
 
@@ -391,21 +354,21 @@
   (function(high){
     /**
      * DMV.Scene.Highscore.prototype.initialize()
-     * ハイスコアシーンのイニシャライズ。
+     * Initializes highscore scene.
      */
     high.initialize = function() {
       Scene_MenuBase.prototype.initialize.call(this);
     };
     /**
      * DMV.Scene.Highscore.prototype.prepare(listID)
-     * ハイスコアシーンのリストを準備。
+     * Prepares teh highscore scenes list.
      */
     high.prepare = function(listID) {
       this._listID = listID;
     };
     /**
      * DMV.Scene.Highscore.prototype.create()
-     * ハイスコアシーンの作成。 
+     * Create the highscore scenes windows. 
      */
     high.create = function() {
       Scene_MenuBase.prototype.create.call(this);
@@ -414,7 +377,7 @@
       this.addWindow(this._highwind);
     };
     /**
-     * DMV.Scene.Highscore.prototype宣言ここまで。
+     * End DMV.Scene.Highscore.prototype declarations
      */
   })($.Scene.Highscore.prototype);
 
@@ -426,7 +389,7 @@
   (function(high){
     /**
      * DMV.Window.Highscore.prototype.initialize(listID)
-     * listIDのハイスコアウインドウのイニシャライズ。
+     * Initialize the highscore widnwo for listID
      */
     high.initialize = function(listID) {
       var d = highscore_lists[this._listID = listID].posi;
@@ -441,7 +404,7 @@
     };
     /**
      * DMV.Window.Highscore.prototype.requestReturned(replystring)
-     * リストをリフレッシュするときに自動的に呼ばれます。
+     * This function is called automatically when refreshing list
      */
     high.requestReturned = function(replystring){
       this.refresh(replystring.split(';'));
@@ -449,8 +412,8 @@
     }
     /**
      * DMV.Window.Highscore.prototype.refresh(scoreArray)
-     * scoreArrayが有効なとき、ハイスコアリストをリフレッシュします。
-     * もし無効なときはリストをクリアします。
+     * Refreshes the highscore list if scoreArray is valid 
+     * if it is not valid, the list will just be cleared.
      */
     high.refresh = function(scoreArray) {
       this.contents.clear();
@@ -466,11 +429,11 @@
       };
     }
     /**
-     * DMV.Window.Highscore.prototype宣言ここまで。
+     * End DMV.Window.Highscore.prototype declarations
      */
   })($.Window.Highscore.prototype);
   /**
-   * DMV宣言ここまで。
+   * End DMV declarations
    */
 })(DMV);
 /**
